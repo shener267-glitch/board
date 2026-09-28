@@ -28,7 +28,7 @@ describe('factory', () => {
 
   it('uses realistic sizes based on the board scale', () => {
     const p = createObject('person', { x: 0, y: 0, pxPerMeter: 10 });
-    expect(p.size).toBe(6);
+    expect(p.size).toBe(10);
     const car = createObject('vehicle', { x: 0, y: 0, preset: '警護車', pxPerMeter: 10 });
     expect(car).toMatchObject({ size: 49, breadth: 18.5 });
     const bus = createObject('vehicle', { x: 0, y: 0, preset: 'バス', pxPerMeter: 20 });

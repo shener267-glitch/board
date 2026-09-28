@@ -142,8 +142,8 @@ export function colorForType(type: string): string {
 
 export const DEFAULT_PX_PER_METER = 10;
 
-/** 実寸の目安 (m) */
-export const PERSON_SIZE_M = 0.6;
+/** 人物の表示サイズ (m)。実寸 (約0.6m) より少し大きめにして見やすくする */
+export const PERSON_SIZE_M = 1.0;
 
 /** 車種ごとの全長・車幅の目安 (m) */
 const VEHICLE_DIMENSIONS: Record<string, [number, number]> = {
