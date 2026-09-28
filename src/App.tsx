@@ -75,7 +75,9 @@ export default function App() {
         const saved = await loadPlan(draft.document.id);
         const isSaved = !!saved && saved.document.updatedAt === draft.document.updatedAt;
         useBoard.getState().loadDocument(draft.document, draft.assets, { saved: isSaved });
-        if (!isSaved) useBoard.getState().setSaveStatus(saved ? 'dirty' : 'new');
+        // 未保存のまま復元した内容は「未保存の変更あり」として扱い、破棄前に確認する
+        const hasContent = draft.document.objects.length > 0 || !!draft.document.background.assetId || draft.document.timeline.length > 0;
+        if (!isSaved) useBoard.getState().setSaveStatus(saved || hasContent ? 'dirty' : 'new');
         if (draft.document.objects.length || draft.document.background.assetId) {
           useBoard.getState().setNotice('前回の編集内容を復元しました');
         }
