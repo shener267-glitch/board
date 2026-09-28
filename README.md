@@ -57,6 +57,16 @@ npm run check      # typecheck + lint + test + build
 
 E2E は `playwright-core` で Chromium を起動します。パスは `CHROMIUM_PATH` 環境変数で指定できます（既定 `/opt/pw-browsers/chromium`）。
 
+### GitHub Pages で公開する
+
+サーバー不要の静的サイトなので GitHub Pages で動作します（保存データは各利用者のブラウザ内に保存されます）。
+
+1. リポジトリの **Settings → Pages → Build and deployment → Source** を **GitHub Actions** にする
+2. `main` ブランチへ push（または Actions タブから「Deploy to GitHub Pages」を手動実行）
+3. `https://<ユーザー名>.github.io/<リポジトリ名>/` で公開される
+
+ワークフローは `.github/workflows/deploy-pages.yml`（型チェック・Lint・テスト・ビルド後にデプロイ）。
+
 ### 技術構成
 
 - Vite 8 + React 19 + TypeScript 6
