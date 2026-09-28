@@ -2,9 +2,8 @@ import { useMemo, useState } from 'react';
 import { BG_ID, canvasApi } from '../canvas/canvasApi';
 import { KIND_LABEL, KIND_LAYER, LAYER_ORDER, objectDisplayName } from '../model/definitions';
 import { objectBounds } from '../model/geometry';
-import type { BoardObject, LayerId } from '../model/types';
+import type { BoardObject, LabelMode, LayerId } from '../model/types';
 import { useBoard } from '../store/boardStore';
-import { CheckField } from './fields';
 
 export function LayerPanel() {
   const doc = useBoard((s) => s.doc);
@@ -12,7 +11,7 @@ export function LayerPanel() {
   const updateLayer = useBoard((s) => s.updateLayer);
   const setAllLayers = useBoard((s) => s.setAllLayers);
   const updateBackground = useBoard((s) => s.updateBackground);
-  const setShowLabels = useBoard((s) => s.setShowLabels);
+  const setLabelMode = useBoard((s) => s.setLabelMode);
   const select = useBoard((s) => s.select);
   const [open, setOpen] = useState<Partial<Record<LayerId, boolean>>>({});
 
@@ -41,7 +40,22 @@ export function LayerPanel() {
           すべてロック解除
         </button>
       </div>
-      <CheckField label="名称ラベルを表示" checked={doc.settings.showLabels} onChange={setShowLabels} />
+      <div className="field">
+        <label className="field-label" htmlFor="label-mode">
+          名前の表示
+        </label>
+        <select
+          id="label-mode"
+          className="input"
+          value={doc.settings.labelMode}
+          onChange={(e) => setLabelMode(e.target.value as LabelMode)}
+        >
+          <option value="auto">自動（拡大時のみ・重なる名前は省略）</option>
+          <option value="all">すべて表示</option>
+          <option value="selected">選択中のみ</option>
+          <option value="none">表示しない</option>
+        </select>
+      </div>
       <ul className="layer-list" aria-label="レイヤー">
         {layers.map((l) => {
           const st = doc.layers[l.id];

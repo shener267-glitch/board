@@ -29,6 +29,7 @@ export function createFromTool(tool: ToolId, opts: CreateOptions): BoardObject |
   const obj = createObject(def.kind, {
     preset: presetForTool(tool),
     shape: def.shape,
+    pxPerMeter: s.doc.settings.pxPerMeter,
     ...opts,
   });
   s.addObject(obj);

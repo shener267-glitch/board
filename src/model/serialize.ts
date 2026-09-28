@@ -1,9 +1,10 @@
-import { defaultLayers, defaultPresets, KIND_LABEL } from './definitions';
+import { DEFAULT_PX_PER_METER, defaultLayers, defaultPresets, KIND_LABEL } from './definitions';
 import { createDocument, createObject, createTimelineEntry, emptyBackground } from './factory';
 import {
   SCHEMA_VERSION,
   type Asset,
   type BoardObject,
+  type LabelMode,
   type LayerId,
   type ObjectKind,
   type OperationDocument,
@@ -14,6 +15,8 @@ import {
 export const PACKAGE_FORMAT = 'operation-board';
 
 export class ImportError extends Error {}
+
+const LABEL_MODES: LabelMode[] = ['auto', 'all', 'selected', 'none'];
 
 type Dict = Record<string, unknown>;
 
@@ -47,6 +50,12 @@ function normalizeObject(raw: unknown): BoardObject | null {
   const obj = mergeTyped(base as BoardObject, raw);
   if (typeof raw.id === 'string' && raw.id) obj.id = raw.id;
   if (typeof raw.locked === 'boolean') obj.locked = raw.locked;
+  if (obj.kind === 'crowd') {
+    const n = raw.estimatedCount;
+    obj.estimatedCount = typeof n === 'number' && Number.isFinite(n) ? n : null;
+  }
+  // 旧形式 (車幅なし) は全長から補完
+  if (obj.kind === 'vehicle' && typeof raw.breadth !== 'number') obj.breadth = Math.round(obj.size * 0.4 * 10) / 10;
   if ('points' in obj) {
     const pts = (obj as { points: unknown[] }).points.filter(
       (n): n is number => typeof n === 'number' && Number.isFinite(n),
@@ -115,7 +124,13 @@ export function normalizeDocument(raw: unknown): OperationDocument {
   doc.settings = {
     presets,
     viewport: mergeTyped(fresh.settings.viewport, settingsRaw.viewport),
-    showLabels: typeof settingsRaw.showLabels === 'boolean' ? settingsRaw.showLabels : true,
+    labelMode: LABEL_MODES.includes(settingsRaw.labelMode as LabelMode)
+      ? (settingsRaw.labelMode as LabelMode)
+      : settingsRaw.showLabels === false
+        ? 'none'
+        : 'auto',
+    pxPerMeter:
+      typeof settingsRaw.pxPerMeter === 'number' && settingsRaw.pxPerMeter > 0 ? settingsRaw.pxPerMeter : DEFAULT_PX_PER_METER,
   };
   if (doc.settings.viewport.scale <= 0) doc.settings.viewport.scale = 1;
   return doc;

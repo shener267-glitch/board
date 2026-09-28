@@ -103,7 +103,7 @@ export const TOOLS: Record<ToolId, ToolDef> = {
     kind: 'crowd',
     shape: 'polygon',
     presetCategory: 'crowdType',
-    hint: 'クリックで頂点を追加。ダブルクリック / Enter / 「確定」で完成、Esc で取消。',
+    hint: 'クリック（タップ）で頂点を追加、ドラッグで画面移動。ダブルクリック / Enter / 「確定」で完成。',
   },
   'zone-rect': {
     id: 'zone-rect',
@@ -121,7 +121,7 @@ export const TOOLS: Record<ToolId, ToolDef> = {
     kind: 'zone',
     shape: 'polygon',
     presetCategory: 'zoneType',
-    hint: 'クリックで頂点を追加。ダブルクリック / Enter / 「確定」で完成、Esc で取消。',
+    hint: 'クリック（タップ）で頂点を追加、ドラッグで画面移動。ダブルクリック / Enter / 「確定」で完成。',
   },
   route: {
     id: 'route',
@@ -129,7 +129,7 @@ export const TOOLS: Record<ToolId, ToolDef> = {
     mode: 'polyline',
     kind: 'route',
     presetCategory: 'routeType',
-    hint: 'クリックで経由点を追加。ダブルクリック / Enter / 「確定」で完成、Esc で取消。',
+    hint: 'クリック（タップ）で経由点を追加、ドラッグで画面移動。ダブルクリック / Enter / 「確定」で完成。',
   },
   arrow: { id: 'arrow', label: '矢印', mode: 'drag-line', kind: 'arrow', hint: '始点から終点へドラッグして矢印を描く。' },
   line: { id: 'line', label: '線', mode: 'drag-line', kind: 'line', hint: '始点から終点へドラッグして線を描く。' },

@@ -17,7 +17,7 @@ import {
 } from 'react-konva';
 import { KIND_LAYER, LAYER_ORDER } from '../model/definitions';
 import { bakeScale, isNear, normalizePoints, objectBounds, rectFromPoints, simplifyPoints, unionRects, type Rect as R } from '../model/geometry';
-import type { BoardObject } from '../model/types';
+import type { BoardObject, ObjectKind } from '../model/types';
 import { createFromTool, loadSampleBackground, uploadBackgroundFile } from '../store/actions';
 import { objectEditable, timelineLinkedIds, useBoard } from '../store/boardStore';
 import { TOOLS, type ToolId } from '../store/tools';
@@ -37,6 +37,42 @@ type Draft =
 
 const POINT_KINDS = new Set(['route', 'arrow', 'line']);
 const ICON_KINDS = new Set(['person', 'vehicle', 'facility', 'point', 'marker']);
+const LINE_KINDS = new Set(['route', 'arrow', 'line', 'freehand']);
+
+/** 名称ラベルの文字サイズ (画面上 px) */
+const LABEL_FS = 11;
+/** 重なったときに優先して残すラベル (小さいほど優先) */
+const LABEL_PRIORITY: Record<ObjectKind, number> = {
+  person: 1,
+  vehicle: 1,
+  facility: 2,
+  point: 2,
+  route: 3,
+  crowd: 4,
+  zone: 5,
+  arrow: 6,
+  line: 6,
+  shape: 6,
+  freehand: 6,
+  marker: 9,
+  memo: 9,
+};
+
+/** 画面上の見た目の大きさに応じて使いやすい縮尺バーの長さを選ぶ */
+const NICE_METERS = [0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000];
+function scaleBar(pxPerMeter: number, scale: number): { meters: number; px: number } {
+  const perM = pxPerMeter * scale;
+  const meters = NICE_METERS.find((m) => m * perM >= 60) ?? NICE_METERS[NICE_METERS.length - 1];
+  return { meters, px: meters * perM };
+}
+
+function rectsOverlap(a: R, b: R): boolean {
+  return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+}
+
+function isCoarsePointer(): boolean {
+  return typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches;
+}
 
 /** 頂点編集対象か */
 function hasVertexHandles(o: BoardObject): boolean {
@@ -108,7 +144,9 @@ export function BoardCanvas() {
   const bgAsset = bg.assetId ? assets[bg.assetId] : undefined;
   const bgImage = useHtmlImage(bgAsset?.dataUrl);
   const scale = viewport.scale;
-  const handleR = 7 / scale;
+  // タッチ操作では頂点・変形ハンドルを大きくする
+  const [coarse] = useState(isCoarsePointer);
+  const handleR = (coarse ? 12 : 7) / scale;
 
   // ツール切り替えで描きかけを破棄
   useEffect(
@@ -221,6 +259,10 @@ export function BoardCanvas() {
     const stage = stageRef.current;
     if (!stage) return;
     if (stage.isDragging()) stage.stopDrag();
+    for (const id of useBoard.getState().selection) {
+      const n = stage.findOne(`#${id}`);
+      if (n?.isDragging()) n.stopDrag();
+    }
     const rect = stage.container().getBoundingClientRect();
     const p1 = { x: touches[0].clientX - rect.left, y: touches[0].clientY - rect.top };
     const p2 = { x: touches[1].clientX - rect.left, y: touches[1].clientY - rect.top };
@@ -241,6 +283,21 @@ export function BoardCanvas() {
   const onTouchEnd = (e: Konva.KonvaEventObject<TouchEvent>) => {
     if (e.evt.touches.length < 2) pinchRef.current = null;
   };
+
+  // Konva 経由の touchend が届かない場合もあるため、ネイティブイベントでもピンチ状態を解除する
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const reset = (e: TouchEvent) => {
+      if (e.touches.length < 2) pinchRef.current = null;
+    };
+    el.addEventListener('touchend', reset);
+    el.addEventListener('touchcancel', reset);
+    return () => {
+      el.removeEventListener('touchend', reset);
+      el.removeEventListener('touchcancel', reset);
+    };
+  }, []);
 
   // ---------- ポインタ操作 (描画ツール) ----------
   const downRef = useRef<{ x: number; y: number } | null>(null);
@@ -339,6 +396,8 @@ export function BoardCanvas() {
     e.evt.pointerType === 'touch' && (pinchRef.current !== null || !e.evt.isPrimary);
 
   const onPointerDown = (e: Konva.KonvaEventObject<PointerEvent>) => {
+    // 1本目の指が触れた = 新しい操作の開始
+    if (e.evt.pointerType === 'touch' && e.evt.isPrimary) pinchRef.current = null;
     downRef.current = { x: e.evt.clientX, y: e.evt.clientY };
     if (isMultiTouch(e) || e.evt.button > 0) return;
     const p = boardPos();
@@ -365,7 +424,25 @@ export function BoardCanvas() {
     else if (d.type === 'poly') setDraftBoth({ ...d, cursor: [p.x, p.y] });
   };
 
-  const onPointerUp = () => {
+  /** ポインタ位置にある配置オブジェクトの ID */
+  const objectIdAtPointer = (): string | null => {
+    const stage = stageRef.current;
+    const pos = stage?.getPointerPosition();
+    if (!stage || !pos) return null;
+    let node: Konva.Node | null = stage.getIntersection(pos);
+    while (node && node !== stage) {
+      if (objById.has(node.id())) return node.id();
+      node = node.getParent();
+    }
+    return null;
+  };
+
+  const onPointerUp = (e: Konva.KonvaEventObject<PointerEvent>) => {
+    // タッチでの選択は指を離した位置で判定する (Konva の tap はピンチ直後などに取りこぼすため)
+    if (e.evt.pointerType === 'touch' && mode === 'select' && !movedSinceDown(e) && !pinchRef.current) {
+      const id = objectIdAtPointer();
+      if (id && !useBoard.getState().selection.includes(id)) select([id]);
+    }
     const d = draftRef.current;
     if (!d || d.type === 'poly') return;
     setDraftBoth(null);
@@ -391,7 +468,12 @@ export function BoardCanvas() {
     return Math.hypot(cx - d.x, cy - d.y) > 6;
   };
 
+  // タッチ後にブラウザが発生させる互換マウスイベントで二重に処理しないための記録
+  const lastTouchAt = useRef(0);
+
   const onStageClick = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent | PointerEvent>) => {
+    if (e.evt.type.startsWith('touch')) lastTouchAt.current = Date.now();
+    else if (Date.now() - lastTouchAt.current < 800) return;
     if (movedSinceDown(e) || pinchRef.current) return;
     const stage = stageRef.current;
     if (!stage) return;
@@ -416,7 +498,7 @@ export function BoardCanvas() {
       }
       return;
     }
-    if (mode === 'select' && e.target === stage) select([]);
+    if (mode === 'select' && e.target === stage && !objectIdAtPointer()) select([]);
   };
 
   const onStageDblClick = () => {
@@ -430,7 +512,8 @@ export function BoardCanvas() {
   };
 
   // ---------- ステージ (パン) ----------
-  const stageDraggable = mode === 'select' || mode === 'pan' || mode === 'place';
+  // ルート・多角形の入力中もドラッグで画面移動できる (タップ/クリックで点を追加)
+  const stageDraggable = mode === 'select' || mode === 'pan' || mode === 'place' || mode === 'polyline';
 
   const onStageDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
     const stage = stageRef.current;
@@ -439,21 +522,43 @@ export function BoardCanvas() {
   };
 
   // ---------- 名称ラベル ----------
-  const showLabels = doc.settings.showLabels;
+  const labelMode = doc.settings.labelMode;
   const { labels, labelOffsets } = useMemo(() => {
-    const list: { id: string; x: number; y: number; text: string; color: string }[] = [];
+    const list: { id: string; x: number; y: number; w: number; text: string; color: string }[] = [];
     const offsets = new Map<string, { ox: number; oy: number }>();
-    if (showLabels) {
-      for (const o of doc.objects) {
-        if (!doc.layers[KIND_LAYER[o.kind]].visible) continue;
-        const l = labelFor(o);
-        if (!l || !l.text) continue;
-        offsets.set(o.id, { ox: l.ox, oy: l.oy });
-        list.push({ id: o.id, x: o.x + l.ox, y: o.y + l.oy, text: l.text, color: l.color });
+    if (labelMode === 'none') return { labels: list, labelOffsets: offsets };
+    const selSet = new Set(selection);
+    const candidates: { o: BoardObject; text: string; ox: number; oy: number; color: string; selected: boolean }[] = [];
+    for (const o of doc.objects) {
+      if (!doc.layers[KIND_LAYER[o.kind]].visible) continue;
+      const selected = selSet.has(o.id);
+      if (labelMode === 'selected' && !selected) continue;
+      const l = labelFor(o);
+      if (!l || !l.text) continue;
+      if (labelMode === 'auto' && !selected) {
+        // 縮小して対象が小さく見えるときは名前を出さない
+        const b = objectBounds(o);
+        const onScreen = Math.max(b.width, b.height) * scale;
+        if (onScreen < (ICON_KINDS.has(o.kind) ? 9 : 48)) continue;
       }
+      candidates.push({ o, ...l, selected });
+    }
+    candidates.sort((a, b) => Number(b.selected) - Number(a.selected) || LABEL_PRIORITY[a.o.kind] - LABEL_PRIORITY[b.o.kind]);
+    const placed: R[] = [];
+    const h = (LABEL_FS * 1.25 + 4) / scale;
+    for (const c of candidates) {
+      const w = (measureText(c.text, LABEL_FS) + 8) / scale;
+      const x = c.o.x + c.ox;
+      const y = c.o.y + c.oy;
+      const rect = { x: x - w / 2, y, width: w, height: h };
+      // 自動表示では重なる名前を省略
+      if (labelMode === 'auto' && !c.selected && placed.some((p) => rectsOverlap(p, rect))) continue;
+      placed.push(rect);
+      offsets.set(c.o.id, { ox: c.ox, oy: c.oy });
+      list.push({ id: c.o.id, x, y, w, text: c.text, color: c.color });
     }
     return { labels: list, labelOffsets: offsets };
-  }, [doc.objects, doc.layers, showLabels]);
+  }, [doc.objects, doc.layers, labelMode, selection, scale]);
 
   // ---------- オブジェクトのドラッグ ----------
   const dragStart = useRef<Map<string, { x: number; y: number }>>(new Map());
@@ -466,6 +571,22 @@ export function BoardCanvas() {
 
   const onObjPointerDown = (obj: BoardObject, e: Konva.KonvaEventObject<PointerEvent>) => {
     if (mode !== 'select') return;
+    if (e.evt.pointerType === 'touch') {
+      // タッチでは未選択のオブジェクトは動かさず、画面移動を優先する (選択はタップで行う)
+      if (!useBoard.getState().selection.includes(obj.id)) {
+        const node = e.currentTarget;
+        const was = node.draggable();
+        node.draggable(false);
+        const restore = () => {
+          node.draggable(was);
+          window.removeEventListener('pointerup', restore);
+          window.removeEventListener('pointercancel', restore);
+        };
+        window.addEventListener('pointerup', restore);
+        window.addEventListener('pointercancel', restore);
+      }
+      return;
+    }
     if (e.evt.shiftKey || e.evt.ctrlKey || e.evt.metaKey) {
       toggleSelect(obj.id);
       return;
@@ -613,14 +734,23 @@ export function BoardCanvas() {
     if (!activeTimelineId) return null;
     const entry = doc.timeline.find((t) => t.id === activeTimelineId);
     if (!entry) return null;
-    const ids = timelineLinkedIds(doc, entry);
-    const rects = ids
+    const objs = timelineLinkedIds(doc, entry)
       .map((id) => objById.get(id))
-      .filter((o): o is BoardObject => !!o && doc.layers[KIND_LAYER[o.kind]].visible)
-      .map((o) => objectBounds(o));
-    if (!rects.length) return null;
+      .filter((o): o is BoardObject => !!o && doc.layers[KIND_LAYER[o.kind]].visible);
+    if (!objs.length) return null;
     const title = [entry.time, entry.action].filter(Boolean).join(' ');
-    return { rects, title };
+    // 見出しは場所 (ルート以外) を優先、ルートは始点に付ける
+    const first = objs.find((o) => !LINE_KINDS.has(o.kind)) ?? objs[0];
+    let anchor: { x: number; y: number };
+    if ('points' in first && LINE_KINDS.has(first.kind) && first.points.length >= 2) {
+      const r = (first.rotation * Math.PI) / 180;
+      const [px, py] = [first.points[0], first.points[1]];
+      anchor = { x: first.x + px * Math.cos(r) - py * Math.sin(r), y: first.y + px * Math.sin(r) + py * Math.cos(r) };
+    } else {
+      const b = objectBounds(first);
+      anchor = { x: b.x, y: b.y };
+    }
+    return { objs, rects: objs.map(objectBounds), title, anchor };
   }, [activeTimelineId, doc, objById]);
 
   useEffect(() => {
@@ -675,9 +805,9 @@ export function BoardCanvas() {
   const objectsListening = mode === 'select';
 
 
-  // ロック等で Transformer が付かない選択オブジェクトの枠
+  // ロック等で Transformer が付かない選択オブジェクトの枠 (頂点ハンドルが出ているものは不要)
   const plainSelected = selection
-    .filter((id) => id !== BG_ID && !transformable.includes(id))
+    .filter((id) => id !== BG_ID && !transformable.includes(id) && id !== vertexTarget?.id)
     .map((id) => objById.get(id))
     .filter((o): o is BoardObject => !!o && doc.layers[KIND_LAYER[o.kind]].visible);
 
@@ -765,7 +895,7 @@ export function BoardCanvas() {
                         onDblClick={() => onObjDblClick(o)}
                         onDblTap={() => onObjDblClick(o)}
                       >
-                        <ObjectVisual obj={o} />
+                        <ObjectVisual obj={o} scale={scale} />
                       </Group>
                     );
                   })}
@@ -777,18 +907,13 @@ export function BoardCanvas() {
         {/* 名称ラベル */}
         <Layer listening={false}>
           <Group>
-            {labels.map((l) => {
-              // 縮小表示でも読めるよう、画面上 12px 以上を保つ
-              const k = 1 / Math.min(scale, 1);
-              const fs = 12 * k;
-              const w = measureText(l.text, 12, true) * k + 8 * k;
-              return (
-                <Label key={l.id} id={`lbl-${l.id}`} x={l.x} y={l.y} offsetX={w / 2}>
-                  <Tag fill="rgba(255,255,255,0.88)" stroke={l.color} strokeWidth={k} cornerRadius={3 * k} />
-                  <Text text={l.text} fontSize={fs} fontStyle="bold" fontFamily={FONT_FAMILY} fill="#1a1a1a" padding={4 * k} />
-                </Label>
-              );
-            })}
+            {labels.map((l) => (
+              // 画面上で一定の小さめの文字サイズ
+              <Label key={l.id} id={`lbl-${l.id}`} x={l.x} y={l.y} offsetX={l.w / 2}>
+                <Tag fill="rgba(255,255,255,0.78)" stroke={l.color} strokeWidth={0.8 / scale} cornerRadius={2 / scale} />
+                <Text text={l.text} fontSize={LABEL_FS / scale} fontFamily={FONT_FAMILY} fill="#1a1a1a" padding={2 / scale} />
+              </Label>
+            ))}
           </Group>
         </Layer>
 
@@ -796,24 +921,13 @@ export function BoardCanvas() {
         <Layer name="ui-layer">
           {highlight && (
             <Group listening={false}>
-              {highlight.rects.map((r, i) => (
-                <Rect
-                  key={i}
-                  x={r.x - 10}
-                  y={r.y - 10}
-                  width={r.width + 20}
-                  height={r.height + 20}
-                  stroke="#ff6d00"
-                  strokeWidth={3 / scale}
-                  dash={[8 / scale, 5 / scale]}
-                  cornerRadius={6 / scale}
-                  fill="rgba(255,109,0,0.08)"
-                />
+              {highlight.objs.map((o) => (
+                <HighlightShape key={o.id} obj={o} scale={scale} />
               ))}
               {highlight.title && (
-                <Label x={highlight.rects[0].x - 10} y={highlight.rects[0].y - 12 - 22 / scale}>
+                <Label x={highlight.anchor.x} y={highlight.anchor.y - 8 / scale} offsetY={22 / scale}>
                   <Tag fill="#ff6d00" cornerRadius={3 / scale} />
-                  <Text text={highlight.title} fontSize={13 / scale} fill="#fff" padding={4 / scale} fontStyle="bold" fontFamily={FONT_FAMILY} />
+                  <Text text={highlight.title} fontSize={12 / scale} fill="#fff" padding={4 / scale} fontStyle="bold" fontFamily={FONT_FAMILY} />
                 </Label>
               )}
             </Group>
@@ -842,7 +956,9 @@ export function BoardCanvas() {
             rotateEnabled
             keepRatio={trConfig.keepRatio}
             enabledAnchors={trConfig.enabledAnchors}
-            anchorSize={10}
+            anchorSize={coarse ? 20 : 10}
+            rotateAnchorOffset={coarse ? 36 : 24}
+            padding={coarse ? 6 : 2}
             anchorCornerRadius={2}
             borderStroke="#1e88e5"
             anchorStroke="#1e88e5"
@@ -867,7 +983,7 @@ export function BoardCanvas() {
                     height={handleR * 1.2}
                     fill="#1e88e5"
                     opacity={0.7}
-                    hitStrokeWidth={10 / scale}
+                    hitStrokeWidth={(coarse ? 18 : 10) / scale}
                     onClick={() => insertVertex(vertexTarget, i, mx, my)}
                     onTap={() => insertVertex(vertexTarget, i, mx, my)}
                   />
@@ -881,7 +997,7 @@ export function BoardCanvas() {
                   fill="#fff"
                   stroke="#1e88e5"
                   strokeWidth={2 / scale}
-                  hitStrokeWidth={12 / scale}
+                  hitStrokeWidth={(coarse ? 16 : 10) / scale}
                   draggable
                   onDragStart={(e) => {
                     e.cancelBubble = true;
@@ -960,6 +1076,16 @@ export function BoardCanvas() {
           </button>
         </div>
       )}
+
+      {(() => {
+        const bar = scaleBar(doc.settings.pxPerMeter, scale);
+        return (
+          <div className="scale-bar" title="縮尺（背景タブで設定）" aria-label={`縮尺 ${bar.meters}m`}>
+            <div className="scale-bar-line" style={{ width: bar.px }} />
+            <span>{bar.meters >= 1000 ? `${bar.meters / 1000}km` : `${bar.meters}m`}</span>
+          </div>
+        );
+      })()}
 
       <div className="canvas-hint" aria-live="polite">
         <strong>{toolDef.label}</strong>
@@ -1099,5 +1225,43 @@ function MemoEditor({ memo, viewport, onCommit, onCancel }: MemoEditorProps) {
         transform: `rotate(${memo.rotation}deg)`,
       }}
     />
+  );
+}
+
+/** タイムラインで選んだ予定に関連するオブジェクトを、その形に沿って強調する */
+function HighlightShape({ obj, scale }: { obj: BoardObject; scale: number }) {
+  const color = '#ff6d00';
+  const glow = { stroke: color, opacity: 0.55, lineCap: 'round' as const, lineJoin: 'round' as const };
+  const outline = { stroke: color, strokeWidth: 3 / scale, dash: [8 / scale, 5 / scale] };
+  const pad = 6 / scale;
+  let shape: React.ReactNode;
+  switch (obj.kind) {
+    case 'route':
+    case 'arrow':
+    case 'line':
+    case 'freehand':
+      shape = <Line points={obj.points} strokeWidth={obj.strokeWidth + 12 / scale} tension={obj.kind === 'freehand' ? 0.4 : 0} {...glow} />;
+      break;
+    case 'crowd':
+    case 'zone':
+      if (obj.shape === 'polygon') shape = <Line points={obj.points} closed {...outline} strokeWidth={5 / scale} opacity={0.9} />;
+      else if (obj.shape === 'ellipse')
+        shape = <Ellipse x={obj.width / 2} y={obj.height / 2} radiusX={obj.width / 2 + pad} radiusY={obj.height / 2 + pad} {...outline} />;
+      else shape = <Rect x={-pad} y={-pad} width={obj.width + pad * 2} height={obj.height + pad * 2} {...outline} />;
+      break;
+    case 'shape':
+    case 'memo':
+      shape = <Rect x={-pad} y={-pad} width={obj.width + pad * 2} height={obj.height + pad * 2} {...outline} />;
+      break;
+    case 'vehicle':
+      shape = <Rect x={-obj.size / 2 - pad} y={-obj.breadth / 2 - pad} width={obj.size + pad * 2} height={obj.breadth + pad * 2} cornerRadius={pad} {...outline} />;
+      break;
+    default:
+      shape = <Circle radius={obj.size / 2 + 8 / scale} {...outline} fill="rgba(255,109,0,0.12)" />;
+  }
+  return (
+    <Group x={obj.x} y={obj.y} rotation={obj.rotation}>
+      {shape}
+    </Group>
   );
 }

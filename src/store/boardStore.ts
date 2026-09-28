@@ -1,10 +1,11 @@
 import { create } from 'zustand';
 import { KIND_LAYER, LAYER_ORDER } from '../model/definitions';
-import { createDocument, createTimelineEntry, newId } from '../model/factory';
+import { createDocument, createTimelineEntry, newId, personSize, vehicleSize } from '../model/factory';
 import type {
   Asset,
   BackgroundSettings,
   BoardObject,
+  LabelMode,
   LayerId,
   LayerState,
   OperationDocument,
@@ -102,7 +103,10 @@ export interface BoardState {
   // ---- 候補 ----
   addPreset: (cat: PresetCategory, name: string) => void;
   removePreset: (cat: PresetCategory, name: string) => void;
-  setShowLabels: (v: boolean) => void;
+  setLabelMode: (v: LabelMode) => void;
+  setPxPerMeter: (v: number) => void;
+  /** 人物・車両を縮尺に合わせた実寸サイズに揃える */
+  applyRealisticSizes: () => void;
 }
 
 function isEditable(doc: OperationDocument, obj: BoardObject): boolean {
@@ -511,7 +515,21 @@ export const useBoard = create<BoardState>()((set, get) => {
         },
       })),
 
-    setShowLabels: (showLabels) => commit((d) => ({ ...d, settings: { ...d.settings, showLabels } })),
+    setLabelMode: (labelMode) => commit((d) => ({ ...d, settings: { ...d.settings, labelMode } })),
+    setPxPerMeter: (pxPerMeter) => {
+      if (!(pxPerMeter > 0)) return;
+      commit((d) => ({ ...d, settings: { ...d.settings, pxPerMeter } }), 'px-per-meter');
+    },
+    applyRealisticSizes: () =>
+      commit((d) => {
+        const ppm = d.settings.pxPerMeter;
+        return mapObjects(d, (o) => {
+          if (!isEditable(d, o)) return o;
+          if (o.kind === 'person') return { ...o, size: personSize(ppm) };
+          if (o.kind === 'vehicle') return { ...o, ...vehicleSize(o.vehicleType, ppm) };
+          return o;
+        });
+      }),
   };
 });
 

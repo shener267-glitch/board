@@ -10,6 +10,7 @@ import {
   MEMO_COLORS,
   objectDisplayName,
 } from '../model/definitions';
+import { vehicleSize } from '../model/factory';
 import { objectBounds } from '../model/geometry';
 import type { BoardObject, PresetCategory } from '../model/types';
 import { objectEditable, relatedTimeline, useBoard } from '../store/boardStore';
@@ -106,6 +107,8 @@ function NothingSelected() {
         <li>ルート・多角形は頂点をドラッグで編集。■をクリックで頂点追加、頂点をダブルクリックで削除。</li>
         <li>Ctrl/⌘+Z 元に戻す、Ctrl/⌘+Shift+Z やり直し、Ctrl/⌘+C/V コピー/貼り付け、Delete 削除。</li>
         <li>ホイールまたはピンチで拡大縮小、空白部分のドラッグで画面移動。</li>
+        <li>スマートフォンでは、タップで選択してからドラッグで移動します（未選択のものの上をなぞると画面移動）。</li>
+        <li>人物・車両は「背景」タブの縮尺に合わせた実寸で配置されます。名前の表示方法は「レイヤー」タブで変更できます。</li>
       </ul>
     </div>
   );
@@ -194,6 +197,12 @@ function SingleObject({ obj }: { obj: BoardObject }) {
     const patch: Record<string, unknown> = { [typeField.key]: value };
     // 色が旧種類の既定色のままなら新しい種類の色に合わせる
     if (obj.kind !== 'marker' && obj.color === colorForType(old)) patch.color = colorForType(value);
+    // 車両の大きさが旧車種の実寸のままなら新しい車種の実寸に合わせる
+    if (obj.kind === 'vehicle') {
+      const ppm = doc.settings.pxPerMeter;
+      const prev = vehicleSize(old, ppm);
+      if (Math.abs(prev.size - obj.size) < 0.5 && Math.abs(prev.breadth - obj.breadth) < 0.5) Object.assign(patch, vehicleSize(value, ppm));
+    }
     set(patch, typeField.key);
   };
 
@@ -269,7 +278,8 @@ function SingleObject({ obj }: { obj: BoardObject }) {
             min={0}
             step={10}
             disabled={disabled}
-            onChange={(v) => set({ estimatedCount: Math.round(v) })}
+            onChange={(v) => set({ estimatedCount: Math.round(v) }, 'estimatedCount')}
+            onClear={() => set({ estimatedCount: null }, 'estimatedCount')}
             suffix="人"
           />
           <div className="field-static">範囲：{obj.shape === 'rect' ? '矩形' : obj.shape === 'ellipse' ? '円形' : '多角形'}</div>
@@ -286,6 +296,10 @@ function SingleObject({ obj }: { obj: BoardObject }) {
 
       {(obj.kind === 'arrow' || obj.kind === 'line' || obj.kind === 'freehand' || obj.kind === 'shape') && (
         <TextField label="ラベル" value={obj.label} disabled={disabled} onChange={(v) => set({ label: v })} />
+      )}
+
+      {obj.kind === 'zone' && (
+        <CheckField label="縁取りのみ（塗りつぶさない）" checked={obj.outlineOnly} disabled={disabled} onChange={(v) => set({ outlineOnly: v })} />
       )}
 
       {obj.kind === 'line' && (
@@ -315,8 +329,17 @@ function SingleObject({ obj }: { obj: BoardObject }) {
         {'strokeWidth' in obj && (
           <NumberField label="線の太さ" value={obj.strokeWidth} min={1} max={40} disabled={disabled} onChange={(v) => set({ strokeWidth: v })} suffix="px" />
         )}
-        {'size' in obj && (
-          <NumberField label="大きさ" value={obj.size} min={12} max={400} disabled={disabled} onChange={(v) => set({ size: v })} suffix="px" />
+        {obj.kind === 'vehicle' ? (
+          <div className="field-row">
+            <NumberField label="全長" value={obj.size / doc.settings.pxPerMeter} min={0.5} max={50} step={0.1} disabled={disabled} onChange={(v) => set({ size: v * doc.settings.pxPerMeter }, 'size')} suffix="m" />
+            <NumberField label="車幅" value={obj.breadth / doc.settings.pxPerMeter} min={0.3} max={10} step={0.1} disabled={disabled} onChange={(v) => set({ breadth: v * doc.settings.pxPerMeter }, 'breadth')} suffix="m" />
+          </div>
+        ) : obj.kind === 'person' ? (
+          <NumberField label="大きさ" value={obj.size / doc.settings.pxPerMeter} min={0.1} max={20} step={0.1} disabled={disabled} onChange={(v) => set({ size: v * doc.settings.pxPerMeter }, 'size')} suffix="m" />
+        ) : (
+          'size' in obj && (
+            <NumberField label="大きさ" value={obj.size} min={2} max={400} disabled={disabled} onChange={(v) => set({ size: v }, 'size')} suffix="px" />
+          )
         )}
         {'width' in obj && 'height' in obj && !('shape' in obj && obj.shape === 'polygon') && (
           <div className="field-row">

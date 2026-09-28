@@ -18,8 +18,12 @@ function rotatePoint(px: number, py: number, deg: number): [number, number] {
 /** 原点相対のローカル座標点列 (外接矩形算出用) */
 function localCorners(obj: BoardObject): number[] {
   switch (obj.kind) {
+    case 'vehicle': {
+      const hl = obj.size / 2;
+      const hb = obj.breadth / 2;
+      return [-hl, -hb, hl, -hb, hl, hb, -hl, hb];
+    }
     case 'person':
-    case 'vehicle':
     case 'facility':
     case 'point':
     case 'marker': {
@@ -90,12 +94,15 @@ export function bakeScale(obj: BoardObject, sx: number, sy: number): Partial<Boa
   const ax = Math.abs(sx);
   const ay = Math.abs(sy);
   switch (obj.kind) {
+    case 'vehicle': {
+      const k = Math.max(ax, ay);
+      return { size: Math.max(2, Math.round(obj.size * k * 10) / 10), breadth: Math.max(1, Math.round(obj.breadth * k * 10) / 10) };
+    }
     case 'person':
-    case 'vehicle':
     case 'facility':
     case 'point':
     case 'marker':
-      return { size: Math.max(12, Math.round(obj.size * Math.max(ax, ay))) };
+      return { size: Math.max(2, Math.round(obj.size * Math.max(ax, ay) * 10) / 10) };
     case 'crowd':
     case 'zone':
       if (obj.shape === 'polygon') return { points: scalePoints(obj.points, ax, ay) };

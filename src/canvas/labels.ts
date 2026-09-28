@@ -41,7 +41,7 @@ export function labelFor(obj: BoardObject): LabelSpec | null {
     case 'point':
       return obj.name ? bottom(obj.name) : null;
     case 'crowd': {
-      const text = `${obj.crowdType || '群衆'}${obj.estimatedCount ? ` 約${obj.estimatedCount.toLocaleString()}人` : ''}`;
+      const text = `${obj.crowdType || '群衆'}${obj.estimatedCount !== null ? ` 約${obj.estimatedCount.toLocaleString()}人` : ''}`;
       return { text, ox: b.x + b.width / 2 - obj.x, oy: b.y + b.height / 2 - obj.y - 9, color: obj.color };
     }
     case 'zone': {
