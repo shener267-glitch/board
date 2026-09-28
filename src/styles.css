@@ -562,6 +562,20 @@ textarea.input {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
+.memo-editor {
+  position: absolute;
+  transform-origin: 0 0;
+  border: 2px solid var(--accent);
+  border-radius: 0;
+  resize: none;
+  line-height: 1.3;
+  font-family: var(--font);
+  color: #212121;
+  outline: none;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  z-index: 5;
+}
+
 .empty-board {
   position: absolute;
   inset: 0;

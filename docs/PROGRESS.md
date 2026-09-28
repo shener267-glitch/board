@@ -22,16 +22,15 @@
 | 13 | 保存・読み込み（IndexedDB に作戦とアセットを分離保存、自動退避・復元、JSON 読み込み） | `src/storage/db.ts`, `LoadDialog.tsx` |
 | 14 | Undo/Redo（履歴 150 件、連続入力のまとめ） | `src/store/boardStore.ts` |
 | 15 | エクスポート（JSON 画像込み/配置のみ、PNG、印刷・PDF） | `src/export/exportBoard.ts`, `PrintSheet.tsx` |
+| + | Shift+ドラッグの範囲選択、メモのダブルクリック直接編集 | `BoardCanvas.tsx` |
 
 ## テスト
 
 - ユニット: `src/model/model.test.ts`, `src/store/boardStore.test.ts`, `src/storage/db.test.ts`, `src/components/panels.test.tsx`
-- E2E: `e2e/smoke.mjs`（背景アップロード→人物/車両/群衆/ルート/区域/メモ配置→編集→タイムライン→レイヤー→保存→再読み込み→書き出し→スマホ表示）
+- E2E: `e2e/smoke.mjs`（背景アップロード→人物/車両/群衆/ルート/区域/メモ配置→編集→タイムライン→レイヤー→保存→再読み込み→書き出し→スマホ表示・ピンチ/パン、メモ直接編集・リサイズ・範囲選択）
 
 ## 未完了・今後の課題
 
-- 範囲選択（ドラッグで矩形選択）
-- メモのキャンバス上での直接編集（現在はダブルクリックで右パネルの本文欄にフォーカス）
 - PDF の直接生成（現在はブラウザの印刷機能で PDF 保存）
 - 複数ボード（フェーズ/時間帯ごとのボード切り替え）やタイムライン時刻に応じた配置の表示切替
 - 距離の縮尺設定（背景画像のピクセル→メートル換算）

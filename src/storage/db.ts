@@ -98,9 +98,14 @@ export async function savePlan(
     document: doc,
   };
   plans.put(record);
+  // アセットは ID ごとに不変なので、未保存のものだけ書き込む (自動退避時の負荷軽減)
   for (const id of assetIds) {
     const a = assets[id];
-    if (a) assetStore.put(a);
+    if (!a) continue;
+    const req = assetStore.getKey(id);
+    req.onsuccess = () => {
+      if (req.result === undefined) assetStore.put(a);
+    };
   }
   await txDone(tx);
   await collectGarbage();

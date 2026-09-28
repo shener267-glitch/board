@@ -80,6 +80,10 @@ try {
     const p = at(fx, fy);
     await page.mouse.click(p.x, p.y);
   };
+  const toScreen = async (bx, by) => {
+    const v = (await state()).viewport;
+    return { x: box.x + v.x + bx * v.scale, y: box.y + v.y + by * v.scale };
+  };
   const drag = async (a, b) => {
     const p = at(...a);
     const q = at(...b);
@@ -151,6 +155,32 @@ try {
   await page.locator('#prop-memo-text').fill('ここで集合\n14:00開始');
   check((await state()).doc.objects.find((o) => o.kind === 'memo').text.includes('集合'), 'メモ本文を編集');
 
+  console.log('   メモをキャンバス上で直接編集');
+  {
+    const m = (await state()).doc.objects.find((o) => o.kind === 'memo');
+    const p = await toScreen(m.x + m.width / 2, m.y + m.height / 2);
+    await page.mouse.dblclick(p.x, p.y);
+    const editor = page.locator('textarea.memo-editor');
+    await editor.waitFor();
+    await editor.fill('車両待機');
+    await page.keyboard.press('Control+Enter');
+    check((await state()).doc.objects.find((o) => o.kind === 'memo').text === '車両待機', 'ダブルクリックでメモを直接編集');
+  }
+
+  console.log('   変形ハンドルでリサイズ');
+  {
+    const c = (await state()).doc.objects.find((o) => o.kind === 'crowd');
+    const center = await toScreen(c.x + c.width / 2, c.y + c.height / 2);
+    await page.mouse.click(center.x, center.y);
+    const br = await toScreen(c.x + c.width, c.y + c.height);
+    await page.mouse.move(br.x, br.y);
+    await page.mouse.down();
+    await page.mouse.move(br.x + 30, br.y + 20, { steps: 5 });
+    await page.mouse.up();
+    const c2 = (await state()).doc.objects.find((o) => o.kind === 'crowd');
+    check(c2.width > c.width + 20 && c2.height > c.height + 10, `群衆エリアを拡大 (${Math.round(c.width)}→${Math.round(c2.width)})`);
+  }
+
   console.log('   矢印・マーカー・施設');
   await tool('矢印');
   await drag([0.3, 0.2], [0.4, 0.28]);
@@ -177,6 +207,20 @@ try {
   check((await state()).doc.objects.length === n0 + 1, 'Undo で復元');
   await page.keyboard.press('Control+Shift+z');
   check((await state()).doc.objects.length === n0, 'Redo で再削除');
+
+  console.log('   Shift+ドラッグで範囲選択');
+  {
+    await page.keyboard.press('Escape');
+    await page.keyboard.down('Shift');
+    await page.mouse.move(box.x + 3, box.y + 3);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width - 3, box.y + box.height - 60, { steps: 6 });
+    await page.mouse.up();
+    await page.keyboard.up('Shift');
+    const st = await state();
+    check(st.selection.length >= 5, `範囲選択 (${st.selection.length} 件)`);
+    await page.keyboard.press('Escape');
+  }
 
   console.log('10. タイムライン');
   await page.getByRole('button', { name: '＋ 予定を追加' }).click();
@@ -247,6 +291,27 @@ try {
   await mp.touchscreen.tap(mb.x + mb.width * 0.5, mb.y + mb.height * 0.5);
   const mcount = await mp.evaluate(() => window.__board.getState().doc.objects.length);
   check(mcount === 1, 'タップで人物を配置');
+  {
+    const cdp = await mobile.newCDPSession(mp);
+    const vp = () => mp.evaluate(() => window.__board.getState().viewport);
+    const touch = (type, pts) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts.map(([x, y], id) => ({ x, y, id })) });
+    const cx = mb.x + mb.width / 2;
+    const cy = mb.y + mb.height * 0.25;
+    const v0 = await vp();
+    await touch('touchStart', [[cx - 40, cy], [cx + 40, cy]]);
+    for (let i = 1; i <= 8; i++) await touch('touchMove', [[cx - 40 - i * 10, cy], [cx + 40 + i * 10, cy]]);
+    await touch('touchEnd', []);
+    const v1 = await vp();
+    check(v1.scale > v0.scale * 1.5, `ピンチで拡大 (${Math.round(v0.scale * 100)}% → ${Math.round(v1.scale * 100)}%)`);
+    await mp.waitForTimeout(450);
+    const sx = mb.x + 20;
+    const sy = mb.y + 30;
+    await touch('touchStart', [[sx, sy]]);
+    for (let i = 1; i <= 8; i++) await touch('touchMove', [[sx + i * 12, sy + i * 6]]);
+    await touch('touchEnd', []);
+    const v2 = await vp();
+    check(Math.abs(v2.x - v1.x) > 40, `1本指ドラッグでパン (Δx=${Math.round(v2.x - v1.x)})`);
+  }
   await mp.getByRole('tab', { name: '詳細' }).tap();
   await mp.screenshot({ path: path.join(shots, 'mobile-board.png') });
 

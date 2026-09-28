@@ -40,7 +40,7 @@ export const TOOLS: Record<ToolId, ToolDef> = {
     id: 'select',
     label: '選択',
     mode: 'select',
-    hint: 'クリックで選択、ドラッグで移動。Shift+クリックで複数選択。空白部分のドラッグで画面移動。',
+    hint: 'クリックで選択、ドラッグで移動。Shift+クリックで複数選択、Shift+空白ドラッグで範囲選択。空白部分のドラッグで画面移動。',
     shortcut: 'V',
   },
   pan: { id: 'pan', label: '画面移動', mode: 'pan', hint: 'ドラッグで画面を移動。ホイール/ピンチで拡大縮小。', shortcut: 'H' },
@@ -77,7 +77,7 @@ export const TOOLS: Record<ToolId, ToolDef> = {
     presetCategory: 'markerLabel',
     hint: 'ボード上をクリックして注記マーカーを配置。',
   },
-  memo: { id: 'memo', label: 'メモ', mode: 'place', kind: 'memo', hint: 'ボード上をクリックして付箋メモを配置。' },
+  memo: { id: 'memo', label: 'メモ', mode: 'place', kind: 'memo', hint: 'ボード上をクリックして付箋メモを配置。メモはダブルクリックで直接編集できます。' },
   'crowd-rect': {
     id: 'crowd-rect',
     label: '群衆(矩形)',

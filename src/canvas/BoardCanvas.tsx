@@ -32,7 +32,8 @@ type Draft =
   | { type: 'rect'; x1: number; y1: number; x2: number; y2: number }
   | { type: 'line'; x1: number; y1: number; x2: number; y2: number }
   | { type: 'free'; points: number[] }
-  | { type: 'poly'; points: number[]; cursor: [number, number] | null };
+  | { type: 'poly'; points: number[]; cursor: [number, number] | null }
+  | { type: 'marquee'; x1: number; y1: number; x2: number; y2: number; additive: boolean };
 
 const POINT_KINDS = new Set(['route', 'arrow', 'line']);
 const ICON_KINDS = new Set(['person', 'vehicle', 'facility', 'point', 'marker']);
@@ -259,6 +260,21 @@ export function BoardCanvas() {
     }
   };
 
+  const finishMarquee = (d: Extract<Draft, { type: 'marquee' }>) => {
+    const r = rectFromPoints(d.x1, d.y1, d.x2, d.y2);
+    if (r.width < 4 / scale && r.height < 4 / scale) return;
+    const s = useBoard.getState();
+    const hits = s.doc.objects
+      .filter((o) => s.doc.layers[KIND_LAYER[o.kind]].visible)
+      .filter((o) => {
+        const b = objectBounds(o);
+        return b.x >= r.x && b.y >= r.y && b.x + b.width <= r.x + r.width && b.y + b.height <= r.y + r.height;
+      })
+      .map((o) => o.id);
+    const base = d.additive ? s.selection.filter((id) => id !== BG_ID) : [];
+    select([...new Set([...base, ...hits])]);
+  };
+
   const finishLine = (d: Extract<Draft, { type: 'line' }>) => {
     let { x2, y2 } = d;
     if (isNear(d.x1, d.y1, x2, y2, 8 / scale)) {
@@ -327,6 +343,13 @@ export function BoardCanvas() {
     if (isMultiTouch(e) || e.evt.button > 0) return;
     const p = boardPos();
     if (!p) return;
+    const stage = stageRef.current;
+    // Shift + 空白ドラッグで範囲選択
+    if (mode === 'select' && stage && e.target === stage && e.evt.shiftKey) {
+      stage.draggable(false);
+      setDraftBoth({ type: 'marquee', x1: p.x, y1: p.y, x2: p.x, y2: p.y, additive: true });
+      return;
+    }
     if (mode === 'drag-rect') setDraftBoth({ type: 'rect', x1: p.x, y1: p.y, x2: p.x, y2: p.y });
     else if (mode === 'drag-line') setDraftBoth({ type: 'line', x1: p.x, y1: p.y, x2: p.x, y2: p.y });
     else if (mode === 'freehand') setDraftBoth({ type: 'free', points: [p.x, p.y] });
@@ -337,7 +360,7 @@ export function BoardCanvas() {
     if (!d || isMultiTouch(e)) return;
     const p = boardPos();
     if (!p) return;
-    if (d.type === 'rect' || d.type === 'line') setDraftBoth({ ...d, x2: p.x, y2: p.y });
+    if (d.type === 'rect' || d.type === 'line' || d.type === 'marquee') setDraftBoth({ ...d, x2: p.x, y2: p.y });
     else if (d.type === 'free') setDraftBoth({ ...d, points: [...d.points, p.x, p.y] });
     else if (d.type === 'poly') setDraftBoth({ ...d, cursor: [p.x, p.y] });
   };
@@ -346,6 +369,11 @@ export function BoardCanvas() {
     const d = draftRef.current;
     if (!d || d.type === 'poly') return;
     setDraftBoth(null);
+    if (d.type === 'marquee') {
+      stageRef.current?.draggable(stageDraggable);
+      finishMarquee(d);
+      return;
+    }
     if (d.type === 'rect') finishRect(d);
     else if (d.type === 'line') finishLine(d);
     else if (d.type === 'free') {
@@ -479,12 +507,17 @@ export function BoardCanvas() {
     dragStart.current = new Map();
   };
 
+  const [editingMemoId, setEditingMemoId] = useState<string | null>(null);
+  const editingMemo = editingMemoId ? objById.get(editingMemoId) : undefined;
+
   const onObjDblClick = (obj: BoardObject) => {
-    if (obj.kind === 'memo') {
-      const el = document.getElementById('prop-memo-text') as HTMLTextAreaElement | null;
-      el?.focus();
-      el?.select();
+    if (obj.kind !== 'memo' || mode !== 'select') return;
+    if (objectEditable(useBoard.getState().doc, obj)) {
+      setEditingMemoId(obj.id);
+      return;
     }
+    const el = document.getElementById('prop-memo-text') as HTMLTextAreaElement | null;
+    el?.focus();
   };
 
   // ---------- Transformer ----------
@@ -872,6 +905,19 @@ export function BoardCanvas() {
         </Layer>
       </Stage>
 
+      {editingMemo?.kind === 'memo' && (
+        <MemoEditor
+          key={editingMemo.id}
+          memo={editingMemo}
+          viewport={viewport}
+          onCommit={(text) => {
+            if (text !== editingMemo.text) updateObject(editingMemo.id, { text });
+            setEditingMemoId(null);
+          }}
+          onCancel={() => setEditingMemoId(null)}
+        />
+      )}
+
       {isEmpty && (
         <div className="empty-board">
           <div className="empty-card">
@@ -963,6 +1009,10 @@ function DraftPreview({ draft, scale, toolId }: { draft: Draft; scale: number; t
   const color = '#1e88e5';
   const sw = 2 / scale;
   const dash = [6 / scale, 4 / scale];
+  if (draft.type === 'marquee') {
+    const r = rectFromPoints(draft.x1, draft.y1, draft.x2, draft.y2);
+    return <Rect {...r} stroke={color} strokeWidth={1 / scale} dash={[4 / scale, 3 / scale]} fill="rgba(30,136,229,0.08)" listening={false} />;
+  }
   if (draft.type === 'rect') {
     const r = rectFromPoints(draft.x1, draft.y1, draft.x2, draft.y2);
     if (def.shape === 'ellipse')
@@ -1001,5 +1051,53 @@ function DraftPreview({ draft, scale, toolId }: { draft: Draft; scale: number; t
         <Circle key={i} x={x} y={y} radius={(i === 0 ? 6 : 4) / scale} fill={i === 0 ? color : '#fff'} stroke={color} strokeWidth={sw} />
       ))}
     </Group>
+  );
+}
+
+interface MemoEditorProps {
+  memo: Extract<BoardObject, { kind: 'memo' }>;
+  viewport: { x: number; y: number; scale: number };
+  onCommit: (text: string) => void;
+  onCancel: () => void;
+}
+
+/** メモのキャンバス上での直接編集 */
+function MemoEditor({ memo, viewport, onCommit, onCancel }: MemoEditorProps) {
+  const [text, setText] = useState(memo.text);
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    ref.current?.focus();
+    ref.current?.select();
+  }, []);
+  const s = viewport.scale;
+  return (
+    <textarea
+      ref={ref}
+      className="memo-editor"
+      aria-label="メモ本文"
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => onCommit(text)}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          onCancel();
+        } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+          e.preventDefault();
+          onCommit(text);
+        }
+      }}
+      style={{
+        left: memo.x * s + viewport.x,
+        top: memo.y * s + viewport.y,
+        width: memo.width * s,
+        height: memo.height * s,
+        fontSize: memo.fontSize * s,
+        padding: 8 * s,
+        paddingTop: 10 * s,
+        background: memo.color,
+        transform: `rotate(${memo.rotation}deg)`,
+      }}
+    />
   );
 }
