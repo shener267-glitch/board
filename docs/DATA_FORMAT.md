@@ -29,7 +29,7 @@
                 "vehicle": {…}, "person": {…}, "annotation": {…}, "memo": {…} },
     "objects": [
       { "id": "o_…", "kind": "person", "x": 100, "y": 200, "rotation": 0, "color": "#c62828", "notes": "",
-        "size": 6, "name": "", "role": "要人", "affiliation": "", "count": 1, "status": "配置予定" },
+        "size": 10, "name": "", "role": "要人", "affiliation": "", "count": 1, "status": "配置予定" },
       { "kind": "vehicle", "size": 49, "breadth": 18.5, "vehicleType": "警護車", … },   // size=全長, breadth=車幅 (px)
       { "kind": "zone", "shape": "rect", "outlineOnly": false, … },
       { "kind": "crowd", "shape": "rect|ellipse|polygon", "width": 200, "height": 120, "points": [], "crowdType": "観客", "estimatedCount": 100 /* 未記入は null */, … },

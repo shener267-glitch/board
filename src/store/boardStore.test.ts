@@ -121,7 +121,7 @@ describe('board store', () => {
     s().setPxPerMeter(20);
     s().applyRealisticSizes();
     const [p2, v2] = s().doc.objects;
-    expect(p2).toMatchObject({ size: 12 });
+    expect(p2).toMatchObject({ size: 20 });
     expect(v2).toMatchObject({ size: 220, breadth: 50 });
     s().setPxPerMeter(0);
     expect(s().doc.settings.pxPerMeter).toBe(20);
