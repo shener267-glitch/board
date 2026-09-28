@@ -547,7 +547,37 @@ textarea.input {
   font-variant-numeric: tabular-nums;
 }
 
+.scale-bar {
+  position: absolute;
+  right: 8px;
+  bottom: 52px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 11px;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+.scale-bar-line {
+  height: 6px;
+  border: 2px solid #37474f;
+  border-top: 0;
+}
+.subsection-plain {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 10px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
 .draw-actions {
+  white-space: nowrap;
   position: absolute;
   top: 8px;
   left: 50%;
@@ -1144,6 +1174,13 @@ textarea.input {
 .app.narrow .board-canvas.mode-select .canvas-hint {
   display: none;
 }
+.app.narrow .scale-bar {
+  bottom: auto;
+  top: 8px;
+}
+.app.narrow .draw-actions {
+  top: 40px;
+}
 .app.narrow .tl-head {
   display: none;
 }
@@ -1171,6 +1208,25 @@ textarea.input {
 }
 
 @media (pointer: coarse) {
+  /* iOS は 16px 未満の入力欄にフォーカスすると画面を自動拡大するため */
+  input,
+  select,
+  textarea,
+  .input,
+  .meta-field .input,
+  .tl-cell .input,
+  .tl-cell .link-select {
+    font-size: 16px;
+  }
+  .draw-actions {
+    gap: 8px;
+    padding: 6px 10px;
+  }
+  .draw-actions .btn {
+    min-height: 42px;
+    padding: 4px 14px;
+    font-size: 14px;
+  }
   .btn {
     min-height: 36px;
   }

@@ -113,6 +113,20 @@ describe('board store', () => {
     expect(s().doc.timeline.find((t) => t.id === t1)!.locationId).toBeNull();
   });
 
+  it('changes the board scale and resizes people/vehicles to real size', () => {
+    const p = createObject('person', { x: 0, y: 0 });
+    const v = createObject('vehicle', { x: 0, y: 0, preset: 'バス' });
+    s().addObject(p);
+    s().addObject(v);
+    s().setPxPerMeter(20);
+    s().applyRealisticSizes();
+    const [p2, v2] = s().doc.objects;
+    expect(p2).toMatchObject({ size: 12 });
+    expect(v2).toMatchObject({ size: 220, breadth: 50 });
+    s().setPxPerMeter(0);
+    expect(s().doc.settings.pxPerMeter).toBe(20);
+  });
+
   it('manages custom presets', () => {
     s().addPreset('personRole', '通訳');
     s().addPreset('personRole', '通訳');

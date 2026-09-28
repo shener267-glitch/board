@@ -4,6 +4,7 @@ import { uploadBackgroundFile } from '../store/actions';
 import { useBoard } from '../store/boardStore';
 import { ACCEPT_ATTR } from '../storage/files';
 import { CheckField, Field, NumberField } from './fields';
+import { ScaleSettings } from './ScaleSettings';
 
 export function BackgroundPanel() {
   const bg = useBoard((s) => s.doc.background);
@@ -33,6 +34,7 @@ export function BackgroundPanel() {
         />
       </div>
       <p className="muted small">PNG / JPG / SVG に対応。航空写真・地図・平面図・会場図など。画像自体は編集されず、配置情報とは別に保存されます。</p>
+      <ScaleSettings />
       {has && (
         <>
           <div className="field-static">

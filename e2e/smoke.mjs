@@ -312,6 +312,68 @@ try {
     const v2 = await vp();
     check(Math.abs(v2.x - v1.x) > 40, `1本指ドラッグでパン (Δx=${Math.round(v2.x - v1.x)})`);
   }
+  {
+    // 未選択のオブジェクトの上から指でドラッグすると、オブジェクトは動かず画面が動く
+    const cdp = await mobile.newCDPSession(mp);
+    const st = () => mp.evaluate(() => {
+      const s = window.__board.getState();
+      return { v: s.viewport, o: s.doc.objects[0], sel: s.selection };
+    });
+    const touch = (type, pts) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts.map(([x, y], id) => ({ x, y, id })) });
+    await mp.evaluate(() => window.__board.getState().select([]));
+    const a = await st();
+    const px = mb.x + a.v.x + a.o.x * a.v.scale;
+    const py = mb.y + a.v.y + a.o.y * a.v.scale;
+    await touch('touchStart', [[px, py]]);
+    for (let i = 1; i <= 8; i++) await touch('touchMove', [[px - i * 6, py - i * 4]]);
+    await touch('touchEnd', []);
+    await mp.waitForTimeout(300);
+    const b = await st();
+    check(b.o.x === a.o.x && b.o.y === a.o.y && Math.abs(b.v.x - a.v.x) > 40, '未選択オブジェクト上のドラッグは画面移動になる');
+    // タップで選択 → そのままドラッグで移動できる
+    const qx = mb.x + b.v.x + b.o.x * b.v.scale;
+    const qy = mb.y + b.v.y + b.o.y * b.v.scale;
+    const hit = await mp.evaluate(([x, y]) => {
+      const stg = window.__canvas.stage;
+      const r = stg.container().getBoundingClientRect();
+      const n = stg.getIntersection({ x: x - r.left, y: y - r.top });
+      return n ? n.getParent().id() : 'none';
+    }, [qx, qy]);
+    await mp.touchscreen.tap(qx, qy);
+    check((await st()).sel.includes(b.o.id), `タップで選択 (hit=${hit}, id=${b.o.id}, sel=${(await st()).sel})`);
+    await mp.waitForTimeout(450);
+    await touch('touchStart', [[qx, qy]]);
+    for (let i = 1; i <= 8; i++) await touch('touchMove', [[qx + i * 8, qy]]);
+    await touch('touchEnd', []);
+    const c = await st();
+    check(c.o.x > b.o.x, '選択済みオブジェクトは指で移動できる');
+  }
+  {
+    // スマホでルート作成: タップで点を追加、ドラッグは画面移動、「確定」で完成
+    const cdp = await mobile.newCDPSession(mp);
+    const touch = (type, pts) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts.map(([x, y], id) => ({ x, y, id })) });
+    await mp.locator('.tool-palette .tool-btn', { hasText: 'ルート' }).first().tap();
+    const cx = mb.x + mb.width / 2;
+    const cy = mb.y + mb.height / 2;
+    await mp.touchscreen.tap(cx - 80, cy);
+    await mp.waitForTimeout(450);
+    const v0 = await mp.evaluate(() => window.__board.getState().viewport);
+    await touch('touchStart', [[cx, cy - 60]]);
+    for (let i = 1; i <= 6; i++) await touch('touchMove', [[cx + i * 8, cy - 60]]);
+    await touch('touchEnd', []);
+    await mp.waitForTimeout(450);
+    const v1 = await mp.evaluate(() => window.__board.getState().viewport);
+    await mp.touchscreen.tap(cx, cy + 40);
+    await mp.waitForTimeout(450);
+    await mp.touchscreen.tap(cx + 80, cy);
+    await mp.waitForTimeout(300);
+    const txt = await mp.locator('.draw-actions').textContent();
+    check(txt.includes('3 点'), `ルート入力中のドラッグは点を追加せず画面移動 (${txt})`);
+    check(v1.x !== v0.x, 'ルート入力中にパンできる');
+    await mp.getByRole('button', { name: '確定' }).tap();
+    const route = await mp.evaluate(() => window.__board.getState().doc.objects.find((o) => o.kind === 'route'));
+    check(route && route.points.length === 6, 'スマホでルートを作成');
+  }
   await mp.getByRole('tab', { name: '詳細' }).tap();
   await mp.screenshot({ path: path.join(shots, 'mobile-board.png') });
 

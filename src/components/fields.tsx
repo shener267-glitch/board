@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 
 interface FieldProps {
   label: string;
@@ -86,40 +86,67 @@ export function TextAreaField({ label, value, onChange, rows = 3, disabled, id, 
 
 interface NumberFieldProps {
   label: string;
-  value: number;
+  value: number | null;
   onChange: (v: number) => void;
+  /** 空欄 (未記入) を許可する場合に指定 */
+  onClear?: () => void;
   min?: number;
   max?: number;
   step?: number;
   disabled?: boolean;
   suffix?: string;
+  placeholder?: string;
 }
 
-export function NumberField({ label, value, onChange, min, max, step = 1, disabled, suffix }: NumberFieldProps) {
+function formatNumber(v: number | null): string {
+  return v === null || !Number.isFinite(v) ? '' : String(Math.round(v * 100) / 100);
+}
+
+/** 数値入力。入力途中の空欄や「-」を許容し、確定できる値のときだけ反映する */
+export function NumberField({ label, value, onChange, onClear, min, max, step = 1, disabled, suffix, placeholder }: NumberFieldProps) {
   const id = useId();
+  const [draft, setDraft] = useState<string | null>(null);
+  const shown = draft ?? formatNumber(value);
   return (
     <Field label={label} htmlFor={id}>
       <div className="input-with-suffix">
         <input
           id={id}
           className="input"
-          type="number"
+          type="text"
           inputMode="decimal"
-          value={Number.isFinite(value) ? Math.round(value * 100) / 100 : 0}
-          min={min}
-          max={max}
-          step={step}
+          value={shown}
+          placeholder={placeholder ?? (onClear ? '未記入' : undefined)}
           disabled={disabled}
           onChange={(e) => {
-            const n = parseFloat(e.target.value);
+            const text = e.target.value.replace(/[０-９．－]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)).replace(/,/g, '');
+            setDraft(text);
+            if (text.trim() === '') {
+              onClear?.();
+              return;
+            }
+            const n = Number(text);
             if (!Number.isFinite(n)) return;
-            let v = n;
-            if (min !== undefined) v = Math.max(min, v);
-            if (max !== undefined) v = Math.min(max, v);
-            onChange(v);
+            if ((min !== undefined && n < min) || (max !== undefined && n > max)) return;
+            onChange(n);
+          }}
+          onBlur={() => setDraft(null)}
+          onKeyDown={(e) => {
+            if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+            e.preventDefault();
+            let n = (value ?? 0) + (e.key === 'ArrowUp' ? step : -step);
+            if (min !== undefined) n = Math.max(min, n);
+            if (max !== undefined) n = Math.min(max, n);
+            setDraft(null);
+            onChange(n);
           }}
         />
         {suffix && <span className="suffix">{suffix}</span>}
+        {onClear && value !== null && !disabled && (
+          <button type="button" className="btn small ghost" onClick={() => (setDraft(null), onClear())}>
+            未記入
+          </button>
+        )}
       </div>
     </Field>
   );

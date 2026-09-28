@@ -26,6 +26,17 @@ describe('factory', () => {
     expect(c.width).toBe(50);
   });
 
+  it('uses realistic sizes based on the board scale', () => {
+    const p = createObject('person', { x: 0, y: 0, pxPerMeter: 10 });
+    expect(p.size).toBe(6);
+    const car = createObject('vehicle', { x: 0, y: 0, preset: '警護車', pxPerMeter: 10 });
+    expect(car).toMatchObject({ size: 49, breadth: 18.5 });
+    const bus = createObject('vehicle', { x: 0, y: 0, preset: 'バス', pxPerMeter: 20 });
+    expect(bus).toMatchObject({ size: 220, breadth: 50 });
+    // 群衆の想定人数は未記入が既定
+    expect(createObject('crowd', { x: 0, y: 0 }).estimatedCount).toBeNull();
+  });
+
   it('gives unknown custom types a stable color', () => {
     expect(colorForType('独自区分')).toBe(colorForType('独自区分'));
   });
@@ -33,8 +44,10 @@ describe('factory', () => {
 
 describe('geometry', () => {
   it('computes bounds for icon and line objects', () => {
-    const p = createObject('person', { x: 100, y: 100 });
-    expect(objectBounds(p)).toEqual({ x: 84, y: 84, width: 32, height: 32 });
+    const person = { ...createObject('person', { x: 100, y: 100 }), size: 32 };
+    expect(objectBounds(person)).toEqual({ x: 84, y: 84, width: 32, height: 32 });
+    const v = { ...createObject('vehicle', { x: 0, y: 0 }), size: 50, breadth: 20 };
+    expect(objectBounds(v)).toEqual({ x: -25, y: -10, width: 50, height: 20 });
     const r = createObject('route', { x: 10, y: 10, points: [0, 0, 50, 20, -10, 40] });
     expect(objectBounds(r)).toEqual({ x: 0, y: 10, width: 60, height: 40 });
   });
@@ -44,8 +57,8 @@ describe('geometry', () => {
     expect(bakeScale(z, 2, 3)).toEqual({ width: 200, height: 150 });
     const l = createObject('arrow', { x: 0, y: 0, points: [0, 0, 10, 10] });
     expect(bakeScale(l, 2, -1)).toEqual({ points: [0, 0, 20, 10] });
-    const v = createObject('vehicle', { x: 0, y: 0 });
-    expect(bakeScale(v, 2, 1)).toEqual({ size: 88 });
+    const v = { ...createObject('vehicle', { x: 0, y: 0 }), size: 49, breadth: 18.5 };
+    expect(bakeScale(v, 2, 1)).toEqual({ size: 98, breadth: 37 });
   });
 
   it('normalizes and simplifies points', () => {
@@ -114,6 +127,27 @@ describe('serialize', () => {
     expect(d.layers.person).toEqual({ visible: false, locked: false });
     expect(d.layers.vehicle).toEqual({ visible: true, locked: false });
     expect(parsed.assets).toHaveLength(0);
+  });
+
+  it('migrates older data (label flag, vehicle breadth, crowd count)', () => {
+    const d = parsePackage(
+      JSON.stringify({
+        format: 'operation-board',
+        document: {
+          settings: { showLabels: false },
+          objects: [
+            { kind: 'vehicle', id: 'v', size: 50 },
+            { kind: 'crowd', id: 'c', estimatedCount: 120 },
+            { kind: 'crowd', id: 'd', estimatedCount: null },
+          ],
+        },
+      }),
+    ).document;
+    expect(d.settings.labelMode).toBe('none');
+    expect(d.settings.pxPerMeter).toBe(10);
+    expect(d.objects[0]).toMatchObject({ size: 50, breadth: 20 });
+    expect(d.objects[1]).toMatchObject({ estimatedCount: 120 });
+    expect(d.objects[2]).toMatchObject({ estimatedCount: null });
   });
 
   it('rejects non-board data', () => {

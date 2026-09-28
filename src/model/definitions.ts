@@ -140,6 +140,29 @@ export function colorForType(type: string): string {
   return FALLBACK_PALETTE[h % FALLBACK_PALETTE.length];
 }
 
+export const DEFAULT_PX_PER_METER = 10;
+
+/** 実寸の目安 (m) */
+export const PERSON_SIZE_M = 0.6;
+
+/** 車種ごとの全長・車幅の目安 (m) */
+const VEHICLE_DIMENSIONS: Record<string, [number, number]> = {
+  要人車: [5.2, 1.9],
+  警護車: [4.9, 1.85],
+  先導車: [4.7, 1.8],
+  随伴車: [4.9, 1.85],
+  バス: [11, 2.5],
+  救急車: [5.7, 1.9],
+  消防車: [8.5, 2.5],
+};
+
+export function vehicleDimensions(type: string): [number, number] {
+  if (VEHICLE_DIMENSIONS[type]) return VEHICLE_DIMENSIONS[type];
+  if (type.includes('バス')) return VEHICLE_DIMENSIONS['バス'];
+  if (type.includes('トラック') || type.includes('消防')) return VEHICLE_DIMENSIONS['消防車'];
+  return [4.8, 1.85];
+}
+
 /** 色選択肢 */
 export const COLOR_SWATCHES = [
   '#c62828',

@@ -70,6 +70,8 @@ export interface PersonObject extends BaseObject, IconSized {
 
 export interface VehicleObject extends BaseObject, IconSized {
   kind: 'vehicle';
+  /** 車幅 (px)。size は全長 */
+  breadth: number;
   name: string;
   vehicleType: string;
   assignee: string;
@@ -108,12 +110,15 @@ interface AreaGeometry {
 export interface CrowdObject extends BaseObject, AreaGeometry {
   kind: 'crowd';
   crowdType: string;
-  estimatedCount: number;
+  /** 未記入は null */
+  estimatedCount: number | null;
   description: string;
 }
 
 export interface ZoneObject extends BaseObject, AreaGeometry {
   kind: 'zone';
+  /** 塗りなし (縁取りのみ) */
+  outlineOnly: boolean;
   name: string;
   zoneType: string;
   description: string;
@@ -239,11 +244,17 @@ export interface ViewportState {
   scale: number;
 }
 
+/** auto: 拡大時・重ならない場合のみ / all: すべて / selected: 選択中のみ / none: 非表示 */
+export type LabelMode = 'auto' | 'all' | 'selected' | 'none';
+
 export interface OperationSettings {
   presets: Record<PresetCategory, string[]>;
   /** 最後に保存したときのビューポート */
   viewport: ViewportState;
-  showLabels: boolean;
+  /** 名称ラベルの表示方法 */
+  labelMode: LabelMode;
+  /** 縮尺: 1m あたりのボード座標 px */
+  pxPerMeter: number;
 }
 
 /** 作戦ドキュメント本体 (画像バイナリを含まない) */

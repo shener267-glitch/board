@@ -44,6 +44,31 @@ describe('PropertyPanel', () => {
   });
 });
 
+describe('crowd estimated count', () => {
+  it('can be cleared (未記入) and re-entered', () => {
+    s().addObject(createObject('crowd', { x: 0, y: 0 }));
+    render(<PropertyPanel />);
+    const input = screen.getByLabelText('想定人数') as HTMLInputElement;
+    expect(input.value).toBe('');
+    fireEvent.change(input, { target: { value: '1' } });
+    expect(s().doc.objects[0]).toMatchObject({ estimatedCount: 1 });
+    fireEvent.change(input, { target: { value: '' } });
+    expect(s().doc.objects[0]).toMatchObject({ estimatedCount: null });
+    expect(input.value).toBe('');
+    fireEvent.change(input, { target: { value: '２５０' } });
+    expect(s().doc.objects[0]).toMatchObject({ estimatedCount: 250 });
+    fireEvent.click(screen.getByRole('button', { name: '未記入' }));
+    expect(s().doc.objects[0]).toMatchObject({ estimatedCount: null });
+  });
+
+  it('lets zones be outline-only', () => {
+    s().addObject(createObject('zone', { x: 0, y: 0 }));
+    render(<PropertyPanel />);
+    fireEvent.click(screen.getByLabelText('縁取りのみ（塗りつぶさない）'));
+    expect(s().doc.objects[0]).toMatchObject({ outlineOnly: true });
+  });
+});
+
 describe('Timeline', () => {
   it('adds, edits, links and reorders entries', () => {
     const f = createObject('facility', { x: 0, y: 0 });

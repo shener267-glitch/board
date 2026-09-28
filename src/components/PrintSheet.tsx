@@ -17,7 +17,7 @@ function detailOf(o: BoardObject): string {
     case 'point':
       return [o.description, o.assignee && `担当:${o.assignee}`].filter(Boolean).join(' / ');
     case 'crowd':
-      return [o.crowdType, `想定${o.estimatedCount}人`, o.description].filter(Boolean).join(' / ');
+      return [o.crowdType, o.estimatedCount !== null ? `想定${o.estimatedCount}人` : '', o.description].filter(Boolean).join(' / ');
     case 'zone':
       return [o.zoneType, o.description].filter(Boolean).join(' / ');
     case 'route':

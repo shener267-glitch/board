@@ -1,4 +1,12 @@
-import { colorForType, defaultLayers, defaultPresets, MEMO_COLORS } from './definitions';
+import {
+  colorForType,
+  DEFAULT_PX_PER_METER,
+  defaultLayers,
+  defaultPresets,
+  MEMO_COLORS,
+  PERSON_SIZE_M,
+  vehicleDimensions,
+} from './definitions';
 import {
   SCHEMA_VERSION,
   type BackgroundSettings,
@@ -48,7 +56,8 @@ export function createDocument(partial?: Partial<OperationDocument>): OperationD
     settings: {
       presets: defaultPresets(),
       viewport: { x: 0, y: 0, scale: 1 },
-      showLabels: true,
+      labelMode: 'auto',
+      pxPerMeter: DEFAULT_PX_PER_METER,
     },
     ...partial,
   };
@@ -63,6 +72,22 @@ export interface CreateOptions {
   height?: number;
   points?: number[];
   shape?: 'rect' | 'ellipse' | 'polygon';
+  /** 縮尺 (人物・車両の実寸サイズ算出用) */
+  pxPerMeter?: number;
+}
+
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
+}
+
+/** 車種の実寸に合わせた全長・車幅 (px) */
+export function vehicleSize(type: string, pxPerMeter: number): { size: number; breadth: number } {
+  const [l, w] = vehicleDimensions(type);
+  return { size: round1(l * pxPerMeter), breadth: round1(w * pxPerMeter) };
+}
+
+export function personSize(pxPerMeter: number): number {
+  return round1(PERSON_SIZE_M * pxPerMeter);
 }
 
 /** 新規オブジェクト生成 */
@@ -71,6 +96,7 @@ export function createObject<K extends ObjectKind>(kind: K, opts: CreateOptions)
   const preset = opts.preset ?? '';
   const w = opts.width ?? 160;
   const h = opts.height ?? 100;
+  const ppm = opts.pxPerMeter ?? DEFAULT_PX_PER_METER;
   let obj: BoardObject;
   switch (kind) {
     case 'person': {
@@ -78,7 +104,7 @@ export function createObject<K extends ObjectKind>(kind: K, opts: CreateOptions)
       obj = {
         ...base,
         kind,
-        size: 32,
+        size: personSize(ppm),
         color: colorForType(role),
         name: '',
         role,
@@ -93,7 +119,7 @@ export function createObject<K extends ObjectKind>(kind: K, opts: CreateOptions)
       obj = {
         ...base,
         kind,
-        size: 44,
+        ...vehicleSize(vehicleType, ppm),
         color: colorForType(vehicleType),
         name: '',
         vehicleType,
@@ -127,7 +153,7 @@ export function createObject<K extends ObjectKind>(kind: K, opts: CreateOptions)
         points: opts.points ?? [],
         color: colorForType(crowdType),
         crowdType,
-        estimatedCount: 100,
+        estimatedCount: null,
         description: '',
       };
       break;
@@ -145,6 +171,7 @@ export function createObject<K extends ObjectKind>(kind: K, opts: CreateOptions)
         name: '',
         zoneType,
         description: '',
+        outlineOnly: false,
       };
       break;
     }

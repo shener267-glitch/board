@@ -23,6 +23,11 @@
 | 14 | Undo/Redo（履歴 150 件、連続入力のまとめ） | `src/store/boardStore.ts` |
 | 15 | エクスポート（JSON 画像込み/配置のみ、PNG、印刷・PDF） | `src/export/exportBoard.ts`, `PrintSheet.tsx` |
 | + | Shift+ドラッグの範囲選択、メモのダブルクリック直接編集 | `BoardCanvas.tsx` |
+| + | 縮尺設定と人物・車両の実寸表示、縮尺バー | `ScaleSettings.tsx`, `definitions.ts` |
+| + | 名前ラベルの表示モード（自動: 縮小時非表示・重なり省略） | `BoardCanvas.tsx`, `LayerPanel.tsx` |
+| + | 数値欄の空欄入力・群衆の想定人数「未記入」、区域の縁取りのみ | `fields.tsx`, `PropertyPanel.tsx` |
+| + | スマホ操作改善（入力時の自動拡大防止、未選択物のドラッグは画面移動、大きいハンドル、ルート入力中のパン、二重タップ防止） | `BoardCanvas.tsx`, `styles.css` |
+| + | 予定強調をオブジェクトの形状に沿って表示 | `BoardCanvas.tsx` |
 
 ## テスト
 
@@ -33,6 +38,5 @@
 
 - PDF の直接生成（現在はブラウザの印刷機能で PDF 保存）
 - 複数ボード（フェーズ/時間帯ごとのボード切り替え）やタイムライン時刻に応じた配置の表示切替
-- 距離の縮尺設定（背景画像のピクセル→メートル換算）
 - 画像の大きい背景（数十MB）の最適化（縮小保存オプション）
 - オブジェクトのグループ化・整列
